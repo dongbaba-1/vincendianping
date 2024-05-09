@@ -1,9 +1,16 @@
 package com.hmdp.service.impl;
 
+import ch.qos.logback.core.joran.util.beans.BeanUtil;
+import cn.hutool.core.util.StrUtil;
+import cn.hutool.json.JSONUtil;
+import com.hmdp.dto.Result;
 import com.hmdp.entity.Shop;
 import com.hmdp.mapper.ShopMapper;
 import com.hmdp.service.IShopService;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import com.hmdp.utils.RedisConstants;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 
 /**
@@ -17,4 +24,24 @@ import org.springframework.stereotype.Service;
 @Service
 public class ShopServiceImpl extends ServiceImpl<ShopMapper, Shop> implements IShopService {
 
+    @Autowired
+    private StringRedisTemplate stringRedisTemplate;
+    @Override
+    public Result queryShopById(Long id) {
+        //先查redis
+        String shopKey = RedisConstants.CACHE_SHOP_KEY + id;
+        String json = stringRedisTemplate.opsForValue().get(shopKey);
+        //判断shopKey是不是空
+        if(StrUtil.isNotBlank(json)){
+            //不为空，将redis获取的json字符串转换为Shop对象并返回
+            Shop shop = JSONUtil.toBean(json, Shop.class);
+            return Result.ok(shop);
+        }
+        //缓存为空则查询数据库
+        Shop shop = getById(id);
+        //将查询到的对象写进redis，设置过期时间TODO
+        stringRedisTemplate.opsForValue()
+                .set(RedisConstants.CACHE_SHOP_KEY + id,JSONUtil.toJsonStr(shop));
+        return Result.ok(shop);
+    }
 }
